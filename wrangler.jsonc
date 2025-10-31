@@ -1,0 +1,32 @@
+{
+  "name": "nogoogle-search",
+  "main": "src/index.js",
+  "compatibility_date": "2025-10-05",
+  "routes": [
+    {
+      "pattern": "nogoogle.hwmnbn.me",
+      "zone_name": "hwmnbn.me",
+      "custom_domain": true
+    },
+    {
+      "pattern": "nogoogle.hwmnbn.me/*",
+      "zone_name": "hwmnbn.me"
+    },
+    {
+      "pattern": "https://nogoogle.hwmnbn.me/*",
+      "zone_name": "hwmnbn.me"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vars": {
+    "AI_GATEWAY_NAME": "skygate",
+    "ACCOUNT_ID": "93e0a6dda0f48d77b387cae708297820"
+  },
+  "observability": {
+    "logs": {
+      "enabled": true
+    }
+  }
+}
