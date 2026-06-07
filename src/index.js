@@ -114,7 +114,7 @@ const SYSTEM_PROMPT = [
 // Search backend defaults (overridable via wrangler vars).
 const DEFAULT_SEARX_URL = "https://search.hwmnbn.me";
 const DEFAULT_GOOGLE_CX = "66fccab6e71344d9f";
-const MAX_RESULTS = 30;
+const MAX_RESULTS = 50;
 
 export default {
   async fetch(request, env) {
@@ -377,6 +377,57 @@ function renderPage(env) {
       border-top: 1px solid rgba(212, 162, 76, 0.2);
       padding-top: 1rem;
     }
+    .result-favicon {
+      width: 16px;
+      height: 16px;
+      vertical-align: -3px;
+      margin-right: 8px;
+      border-radius: 3px;
+      background: rgba(245, 241, 230, 0.12);
+    }
+    .show-more {
+      display: block;
+      margin: 1rem auto 0;
+    }
+    .ai-output.rendered {
+      white-space: normal;
+    }
+    .ai-output.rendered .ai-model-label {
+      margin: 0 0 0.6rem;
+      font-size: 0.8rem;
+      color: var(--text-subtle);
+    }
+    .ai-output.rendered p {
+      margin: 0 0 0.6rem;
+    }
+    .ai-output.rendered ul,
+    .ai-output.rendered ol {
+      margin: 0 0 0.6rem 1.2rem;
+      padding: 0;
+    }
+    .ai-output.rendered li {
+      margin: 0.15rem 0;
+    }
+    .ai-output.rendered h3,
+    .ai-output.rendered h4,
+    .ai-output.rendered h5,
+    .ai-output.rendered h6 {
+      color: var(--accent-gold);
+      margin: 0.5rem 0 0.3rem;
+      font-size: 1rem;
+    }
+    .ai-output.rendered a {
+      color: var(--accent-gold);
+    }
+    .ai-output.rendered strong {
+      color: #fff;
+    }
+    .ai-output.rendered code {
+      background: rgba(0, 0, 0, 0.35);
+      padding: 0 0.3rem;
+      border-radius: 4px;
+      font-size: 0.92em;
+    }
     .gsc-control-cse {
       background: transparent;
       border: none;
@@ -535,6 +586,7 @@ function renderPage(env) {
         <span class="search-status" id="search-status"></span>
       </div>
       <div class="results" id="results" aria-live="polite"></div>
+      <button type="button" class="show-more" id="show-more" hidden></button>
       <div class="google-pane" id="google-pane" hidden>
         <div class="gcse-search"></div>
       </div>
@@ -572,9 +624,12 @@ function renderPage(env) {
       const aiOutput = document.getElementById('ai-output');
       const aiButton = aiForm.querySelector('button');
       const modelSelect = document.getElementById('ai-model');
+      const showMoreBtn = document.getElementById('show-more');
 
+      const PAGE_SIZE = 12;
       let lastResults = [];
       let lastQuery = '';
+      let shown = 0;
       let cseLoaded = false;
 
       function escapeText(value) {
@@ -583,21 +638,88 @@ function renderPage(env) {
         return span.innerHTML;
       }
 
-      function renderResults(results) {
-        if (!results.length) {
+      function hostOf(url) {
+        try {
+          return new URL(url).hostname;
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function resultHtml(r) {
+        const safeUrl = escapeText(r.url);
+        const safeTitle = escapeText(r.title || r.url);
+        const safeSnippet = escapeText(r.snippet || '');
+        const host = hostOf(r.url);
+        const favicon = host
+          ? '<img class="result-favicon" alt="" loading="lazy" src="https://icons.duckduckgo.com/ip3/' + encodeURIComponent(host) + '.ico" />'
+          : '';
+        return '<div class="result">'
+          + '<a class="result-title" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + favicon + safeTitle + '</a>'
+          + '<span class="result-url">' + safeUrl + '</span>'
+          + (safeSnippet ? '<p class="result-snippet">' + safeSnippet + '</p>' : '')
+          + '</div>';
+      }
+
+      function renderResults() {
+        if (!lastResults.length) {
           resultsEl.innerHTML = '<p class="results-empty">No results found.</p>';
+          showMoreBtn.hidden = true;
           return;
         }
-        resultsEl.innerHTML = results.map((r) => {
-          const safeUrl = escapeText(r.url);
-          const safeTitle = escapeText(r.title || r.url);
-          const safeSnippet = escapeText(r.snippet || '');
-          return '<div class="result">'
-            + '<a class="result-title" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + safeTitle + '</a>'
-            + '<span class="result-url">' + safeUrl + '</span>'
-            + (safeSnippet ? '<p class="result-snippet">' + safeSnippet + '</p>' : '')
-            + '</div>';
-        }).join('');
+        resultsEl.innerHTML = lastResults.slice(0, shown).map(resultHtml).join('');
+        const remaining = lastResults.length - shown;
+        showMoreBtn.hidden = remaining <= 0;
+        if (remaining > 0) {
+          showMoreBtn.textContent = 'Show more results (' + remaining + ' more)';
+        }
+      }
+
+      showMoreBtn.addEventListener('click', () => {
+        shown = Math.min(shown + PAGE_SIZE, lastResults.length);
+        renderResults();
+      });
+
+      // Minimal, XSS-safe markdown renderer for AI answers (escapes first).
+      function inlineMd(text) {
+        let s = escapeText(text);
+        s = s.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+        s = s.replace(/(^|[^*])\\*([^*]+)\\*(?!\\*)/g, '$1<em>$2</em>');
+        s = s.replace(/\\[([^\\]]+)\\]\\((https?:[^)\\s]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        s = s.replace(/(^|[\\s(])((?:https?:\\/\\/)[^\\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+        return s;
+      }
+
+      function renderMarkdown(text) {
+        const lines = String(text == null ? '' : text).replace(/\\r/g, '').split('\\n');
+        let html = '';
+        let ulOpen = false;
+        let olOpen = false;
+        const closeLists = () => {
+          if (ulOpen) { html += '</ul>'; ulOpen = false; }
+          if (olOpen) { html += '</ol>'; olOpen = false; }
+        };
+        for (const raw of lines) {
+          const line = raw.trim();
+          if (!line) { closeLists(); continue; }
+          let m;
+          if ((m = /^(#{1,4})\\s+(.*)$/.exec(line))) {
+            closeLists();
+            const lvl = Math.min(m[1].length + 2, 6);
+            html += '<h' + lvl + '>' + inlineMd(m[2]) + '</h' + lvl + '>';
+          } else if ((m = /^[-*]\\s+(.*)$/.exec(line))) {
+            if (!ulOpen) { closeLists(); html += '<ul>'; ulOpen = true; }
+            html += '<li>' + inlineMd(m[1]) + '</li>';
+          } else if ((m = /^\\d+[.)]\\s+(.*)$/.exec(line))) {
+            if (!olOpen) { closeLists(); html += '<ol>'; olOpen = true; }
+            html += '<li>' + inlineMd(m[1]) + '</li>';
+          } else {
+            closeLists();
+            html += '<p>' + inlineMd(line) + '</p>';
+          }
+        }
+        closeLists();
+        return html;
       }
 
       async function runSearch(query) {
@@ -612,11 +734,14 @@ function renderPage(env) {
           const data = await response.json();
           lastResults = Array.isArray(data.results) ? data.results : [];
           lastQuery = query;
-          renderResults(lastResults);
+          shown = Math.min(PAGE_SIZE, lastResults.length);
+          renderResults();
           searchStatus.textContent = lastResults.length
             ? lastResults.length + ' results' + (data.source ? ' · ' + data.source : '')
             : 'No results';
         } catch (error) {
+          lastResults = [];
+          showMoreBtn.hidden = true;
           resultsEl.innerHTML = '<p class="results-empty">Something went wrong: ' + escapeText(error.message) + '</p>';
           searchStatus.textContent = '';
         } finally {
@@ -701,10 +826,12 @@ function renderPage(env) {
         event.preventDefault();
         const query = aiInput.value.trim();
         if (!query) {
+          aiOutput.classList.remove('rendered');
           aiOutput.textContent = 'Please enter a prompt before asking the AI assistant.';
           return;
         }
         aiButton.disabled = true;
+        aiOutput.classList.remove('rendered');
         aiOutput.textContent = 'Thinking…';
         try {
           const response = await fetch('/api/ai', {
@@ -725,8 +852,12 @@ function renderPage(env) {
             ? modelSelect.selectedOptions[0].text
             : '';
           const answer = data.answer || 'No response returned by the AI assistant.';
-          aiOutput.textContent = selectedLabel ? selectedLabel + '\\n\\n' + answer : answer;
+          aiOutput.classList.add('rendered');
+          aiOutput.innerHTML =
+            (selectedLabel ? '<p class="ai-model-label">' + escapeText(selectedLabel) + '</p>' : '')
+            + renderMarkdown(answer);
         } catch (error) {
+          aiOutput.classList.remove('rendered');
           aiOutput.textContent = 'Something went wrong: ' + error.message;
         } finally {
           aiButton.disabled = false;
