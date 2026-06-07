@@ -22,7 +22,9 @@
   },
   "vars": {
     "AI_GATEWAY_NAME": "skygate",
-    "ACCOUNT_ID": "93e0a6dda0f48d77b387cae708297820"
+    "ACCOUNT_ID": "93e0a6dda0f48d77b387cae708297820",
+    "SEARX_URL": "https://search.hwmnbn.me",
+    "GOOGLE_CX": "66fccab6e71344d9f"
   },
   "observability": {
     "logs": {

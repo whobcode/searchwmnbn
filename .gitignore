@@ -2,6 +2,10 @@ node_modules/
 .DS_Store
 .env
 .env.local
+.vars
+.dev.vars
+*.local
+gscrape.pl
 wrangler.toml
 .wrangler/
 .tmp/

@@ -1,0 +1,11 @@
+# Copy this file to `.dev.vars` and fill in real values for local development.
+# `wrangler dev` loads `.dev.vars` automatically.
+# Production secrets are managed separately via: wrangler secret put <NAME>
+#
+# Non-secret config (ACCOUNT_ID, AI_GATEWAY_NAME) lives in wrangler.jsonc `vars`.
+
+# Cloudflare AI Gateway key (for the OpenAI-via-gateway models).
+AI_GATEWAY_KEY=""
+
+# Optional: direct OpenAI key, used only if AI_GATEWAY_KEY is unset.
+OPENAI_API_KEY=""
